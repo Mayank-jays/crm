@@ -353,7 +353,7 @@ class MyNotificationsAPIView(ListAPIView):
     
         
 class AcknowledgeReminderAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    #permission_classes = [IsAuthenticated]
 
     def post(self, request, reminder_id):
         note = request.data.get("note")
