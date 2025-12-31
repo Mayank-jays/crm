@@ -202,6 +202,9 @@ class StructuralCalendarSerializer(serializers.ModelSerializer):
             "reminder_detail",
             "notes",
         )
+    def get_notes(self, obj):
+        # obj.company is the related company
+        return list(obj.company.notes.values("id", "note", "created_at"))   
 
     def get_company_detail(self, obj):
         if not obj.company:
