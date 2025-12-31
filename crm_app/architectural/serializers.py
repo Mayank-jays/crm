@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import ArchitecturalCompany, ArchitecturalContact, ArchitecturalNote, ArchitecturalReminder
+from .models import ArchitecturalCustomer, ArchitecturalContact, ArchitecturalNote, ArchitecturalReminder, ArchitecturalNotification, ArchitecturalCalendarActivity
 
 User = get_user_model()
 
@@ -39,11 +39,11 @@ class ArchitecturalNoteSerializer(serializers.ModelSerializer):
 class ArchitecturalReminderSerializer(serializers.ModelSerializer):
     assigned_to_detail = serializers.SerializerMethodField(read_only=True)
     assigned_to = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
-
+    notes = serializers.SerializerMethodField()
     class Meta:
         model = ArchitecturalReminder
-        fields = ('id', 'assigned_to', 'assigned_to_detail', 'reminder_date', 'frequency', 'note', 'completed')
-        read_only_fields = ('id',)
+        fields = ('id', 'assigned_to', 'assigned_to_detail', 'reminder_date', 'frequency', 'status', 'notes')
+        read_only_fields = ('id','status')
 
     def get_assigned_to_detail(self, obj):
         if obj.assigned_to:
@@ -55,11 +55,22 @@ class ArchitecturalReminderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("assigned_to is required for each reminder.")
         return value
 
+    def get_notes(self, obj):
+        # Assuming Reminder has foreign key to Customer
+        customer = obj.company
+        last_note = customer.notes.last()  # Get last note for this customer
+        if last_note:
+            return {
+                "id": last_note.id,
+                "note": last_note.note,
+                "created_by": last_note.created_by.username if last_note.created_by else None
+            }
+        return None
 
 # ----------------------------
 # Company Serializer
 # ----------------------------
-class ArchitecturalCompanySerializer(serializers.ModelSerializer):
+class ArchitecturalCustomerSerializer(serializers.ModelSerializer):
     added_by_detail = serializers.SerializerMethodField(read_only=True)
     added_by = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
     contacts = ArchitecturalContactSerializer(many=True, required=False)
@@ -67,11 +78,11 @@ class ArchitecturalCompanySerializer(serializers.ModelSerializer):
     notes = ArchitecturalNoteSerializer(many=True, required=False)
 
     class Meta:
-        model = ArchitecturalCompany
+        model = ArchitecturalCustomer
         fields = (
             'id',
-            'name',
-            'company_type',
+            'company_name',
+            'category',
             'existing_category',
             'potential_category',
             'email',
@@ -96,7 +107,7 @@ class ArchitecturalCompanySerializer(serializers.ModelSerializer):
         notes_data = validated_data.pop('notes', [])
 
         # Create company
-        company = ArchitecturalCompany.objects.create(**validated_data)
+        company = ArchitecturalCustomer.objects.create(**validated_data)
 
         # Create contacts
         for contact_data in contacts_data:
@@ -120,3 +131,117 @@ class ArchitecturalCompanySerializer(serializers.ModelSerializer):
                 )
 
         return company
+
+# serializers.py
+
+
+class ArchitecturalNotificationSerializer(serializers.ModelSerializer):
+    company_detail = serializers.SerializerMethodField()
+    reminder_detail = serializers.SerializerMethodField()
+    is_read = serializers.BooleanField(source='read', read_only=True)
+    notification_date = serializers.DateTimeField(source='created_at', read_only=True)
+    class Meta:
+        model = ArchitecturalNotification
+        fields = (
+            "id",
+            "message",
+            "is_read",
+            "company",
+            "company_detail",
+            "reminder",
+            "reminder_detail",
+            "notification_date",
+        )
+
+    def get_company_detail(self, obj):
+        if not obj.company:
+            return None
+        return {
+            "id": obj.company.id,
+            "name": obj.company.company_name,
+        }
+
+    def get_reminder_detail(self, obj):
+        r = obj.reminder
+        if not r:
+            return None
+
+        # Fetch notes for this reminder via the customer
+        notes = r.company.notes.values_list('note', flat=True)  # list of note texts
+
+        return {
+            "id": r.id,
+            "date": r.reminder_date,
+            "frequency": r.frequency,
+            "notes": list(notes),  # include all notes
+            "status": r.status,
+            "assigned_to": {
+                "id": r.assigned_to.id,
+                "name": r.assigned_to.get_full_name(),
+            } if r.assigned_to else None,
+        }
+
+
+
+class ArchitecturalCalendarSerializer(serializers.ModelSerializer):
+    # Mapping activity_date → date (FIXED)
+    date = serializers.DateField(source="activity_date", read_only=True)
+
+    company_detail = serializers.SerializerMethodField()
+    salesperson = serializers.SerializerMethodField()
+    reminder_detail = serializers.SerializerMethodField()
+    notes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ArchitecturalCalendarActivity
+        fields = (
+            "date",
+            "title",
+            "company_detail",
+            "salesperson",
+            "reminder_detail",
+            "notes",
+        )
+    def get_notes(self, obj):
+        # obj.company is the related company
+        return list(obj.company.notes.values("id", "note", "created_at"))   
+
+    def get_company_detail(self, obj):
+        if not obj.company:
+            return None
+        return {
+            "id": obj.company.id,
+            "name": obj.company.company_name,
+        }
+
+    def get_salesperson(self, obj):
+        if not obj.user:
+            return None
+        return {
+            "id": obj.user.id,
+            "name": obj.user.get_full_name(),
+        }
+
+    def get_reminder_detail(self, obj):
+        r = obj.related_reminder
+        if not r:
+            return None
+
+        notes = r.company.notes.values_list('note', flat=True)
+        description = "\n".join(notes)
+
+
+        return {
+            "id": r.id,
+            "date": r.reminder_date,
+            "frequency": r.frequency,
+            "status": r.status,
+            "completed_at": r.completed_at,
+            "notes": list(notes),  # add notes here
+            "assigned_to": {
+                "id": r.assigned_to.id,
+                "name": r.assigned_to.get_full_name(),
+            } if r.assigned_to else None,
+        }
+
+

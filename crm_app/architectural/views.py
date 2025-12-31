@@ -2,16 +2,25 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework.generics import ListAPIView
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q
 import json
 from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
+from django.utils import timezone
 
-from .models import ArchitecturalCompany, ArchitecturalContact, ArchitecturalNote, ArchitecturalReminder
+from rest_framework.views import APIView
+from .utils import *
+
+from django_solvitize.utils.GlobalImports import TokenAuthentication
+from rest_framework.authentication import TokenAuthentication as DRFTokenAuthentication, get_authorization_header
+from .models import ArchitecturalCustomer, ArchitecturalContact, ArchitecturalNote, ArchitecturalReminder, ArchitecturalNotification, ArchitecturalCalendarActivity
 from .serializers import (
-    ArchitecturalCompanySerializer,
+    ArchitecturalCustomerSerializer,
     ArchitecturalContactSerializer,
     ArchitecturalNoteSerializer,
-    ArchitecturalReminderSerializer
+    ArchitecturalReminderSerializer,
+    ArchitecturalNotificationSerializer,
+    ArchitecturalCalendarSerializer
 )
 from core_app.utils import ValidateRequest, get_bool_value
 from django_solvitize.utils.GlobalFunctions import ResponseFunction, printLineNo
@@ -19,15 +28,15 @@ from django_solvitize.utils.GlobalFunctions import ResponseFunction, printLineNo
 User = get_user_model()
 
 
-class ArchitecturalCompanyAPI(ListAPIView):
-    serializer_class = ArchitecturalCompanySerializer
-    queryset = ArchitecturalCompany.objects.all()
+class ArchitecturalCustomerAPI(ListAPIView):
+    serializer_class = ArchitecturalCustomerSerializer
+    queryset = ArchitecturalCustomer.objects.all()
 
     # -----------------------
     # POST: Create new client
     # -----------------------
     def post(self, request, format=None):
-        required = ["name", "added_by", "company_type"]
+        required = ["company_name", "added_by", "category"]
         validation_errors = ValidateRequest(required, request.data)
         if validation_errors:
             return ResponseFunction(0, validation_errors[0]['error'], {})
@@ -66,7 +75,7 @@ class ArchitecturalCompanyAPI(ListAPIView):
 
         try:
             with transaction.atomic():
-                company_obj = get_object_or_404(ArchitecturalCompany, id=id)
+                company_obj = get_object_or_404(ArchitecturalCustomer, id=id)
                 serializer = self.serializer_class(company_obj, data=request.data, partial=True, context={'request': request})
                 serializer.is_valid(raise_exception=True)
                 company_obj = serializer.save()
@@ -87,7 +96,7 @@ class ArchitecturalCompanyAPI(ListAPIView):
     # -----------------------
     def get(self, request, id=None, *args, **kwargs):
         if id:  # Single client
-            company_obj = get_object_or_404(ArchitecturalCompany, id=id)
+            company_obj = get_object_or_404(ArchitecturalCustomer, id=id)
             data = self.serializer_class(company_obj).data
             return ResponseFunction(1, "Client fetched successfully", data)
         else:  # List with pagination & filters
@@ -108,17 +117,17 @@ class ArchitecturalCompanyAPI(ListAPIView):
     def delete(self, request, id=None):
         try:
             if id:
-                ArchitecturalCompany.objects.filter(id=id).delete()
+                ArchitecturalCustomer.objects.filter(id=id).delete()
                 return ResponseFunction(1, f"Deleted client with id {id}", {})
 
             ids = request.GET.get('id', '[]')
             if ids == "all":
-                ArchitecturalCompany.objects.all().delete()
+                ArchitecturalCustomer.objects.all().delete()
                 return ResponseFunction(1, "Deleted all data")
             ids = json.loads(ids)
             if isinstance(ids, int):
                 ids = [ids]
-            ArchitecturalCompany.objects.filter(id__in=ids).delete()
+            ArchitecturalCustomer.objects.filter(id__in=ids).delete()
             return ResponseFunction(1, f"Deleted data having id(s) {ids}", {})
         except Exception as e:
             print(f"Exception occurred {e} at {printLineNo()}")
@@ -127,43 +136,69 @@ class ArchitecturalCompanyAPI(ListAPIView):
     # -----------------------
     # FILTERED Queryset
     # -----------------------
+    
+
     def get_queryset(self):
-        qs = ArchitecturalCompany.objects.all()
+            qs = ArchitecturalCustomer.objects.all()
 
-        # Query params
-        is_dropdown = self.request.GET.get('is_dropdown', '0')
-        exclude_id_list = json.loads(self.request.GET.get('exclude_id_list', '[]'))
+            # Query params
+            is_dropdown = self.request.GET.get('is_dropdown', '0')
+            exclude_id_list = json.loads(self.request.GET.get('exclude_id_list', '[]'))
+            keyword = self.request.GET.get('search', '')  # search key
+            category = self.request.GET.get('category')  # Existing / Potential
+            lead_status = self.request.GET.get('lead_status')    # Hot / Warm / Cold
+            project_status = self.request.GET.get('project_status')  # Hot / Warm / Cold
 
-        # Non-model fields to exclude from filtering
-        NON_DB_FIELDS = ['pagination', 'is_dropdown', 'exclude_id_list', 'page']  # include page
+            # Non-model fields to exclude from filtering
+            NON_DB_FIELDS = ['pagination', 'is_dropdown', 'exclude_id_list', 'page', 'search', 
+                                'category', 'lead_status', 'project_status']
 
-        # Handle dropdown: only id and name
-        if is_dropdown == '1':
-            qs = qs.only('id', 'name')
+            # Handle dropdown: only id and company_name
+            if is_dropdown == '1':
+                qs = qs.only('id', 'company_name')
 
-        # Build filters from GET params
-        filters = {}
-        for field in self.request.GET.keys():
-            if field in NON_DB_FIELDS:
-                continue
+            # Apply exact filters from GET params
+            filters = {}
+            for field in self.request.GET.keys():
+                if field in NON_DB_FIELDS:
+                    continue
 
-            value = self.request.GET.get(field)
-            if value:
-                if field == "name":
-                    filters["name__icontains"] = value
-                elif field in ["is_active"]:
-                    filters["is_active"] = get_bool_value(value)
-                else:
+                value = self.request.GET.get(field)
+                if value:
                     filters[field] = value
 
-        # Apply filters
-        qs = qs.filter(**filters)
+            qs = qs.filter(**filters)
 
-        # Exclude IDs if provided
-        if exclude_id_list:
-            qs = qs.exclude(id__in=exclude_id_list)
+            # Apply keyword search across multiple fields
+            if keyword:
+                qs = qs.filter(
+                    Q(company_name__icontains=keyword) |
+                    Q(email__icontains=keyword) |
+                    Q(phone__icontains=keyword) |
+                    Q(category__icontains=keyword) |
+                    Q(existing_category__icontains=keyword) |
+                    Q(potential_category__icontains=keyword) |
+                    Q(address__icontains=keyword) |
+                    Q(added_by__first_name__icontains=keyword) |
+                    Q(added_by__last_name__icontains=keyword) |
+                    Q(added_by__username__icontains=keyword)
+                )
 
-        return qs.order_by('-id')
+            # Apply category filters if provided
+            if category:
+                qs = qs.filter(category__iexact=category)
+            if lead_status:
+                qs = qs.filter(lead_status__iexact=lead_status)
+            if project_status:
+                qs = qs.filter(project_status__iexact=project_status)
+
+            # Exclude IDs if provided
+            if exclude_id_list:
+                qs = qs.exclude(id__in=exclude_id_list)
+
+            return qs.order_by('-id')
+
+
 
     # -----------------------
     # Paginate queryset correctly (use custom pagination)
@@ -194,29 +229,58 @@ class ArchitecturalCompanyAPI(ListAPIView):
         for reminder in reminders_data:
             reminder_id = reminder.get("id")
             assigned_to_id = reminder.get("assigned_to")
-            assigned_to_user = get_object_or_404(User, id=assigned_to_id) if assigned_to_id else None
+            assigned_to_user = get_object_or_404(User, id=assigned_to_id)
 
             if reminder_id:
                 reminder_obj = get_object_or_404(ArchitecturalReminder, id=reminder_id)
-                reminder_serializer = ArchitecturalReminderSerializer(reminder_obj, data=reminder, partial=True)
+                reminder_serializer = ArchitecturalReminderSerializer(
+                    reminder_obj, data=reminder, partial=True
+                )
                 reminder_serializer.is_valid(raise_exception=True)
-                reminder_serializer.save(assigned_to=assigned_to_user)
+                reminder_obj = reminder_serializer.save(assigned_to=assigned_to_user)
             else:
                 reminder_serializer = ArchitecturalReminderSerializer(data=reminder)
                 reminder_serializer.is_valid(raise_exception=True)
-                reminder_serializer.save(company=company_obj, assigned_to=assigned_to_user)
-
-        # Notes
-        added_by_id = request.data.get("added_by")
-        added_by_user = get_object_or_404(User, id=added_by_id) if added_by_id else None
-        for note in notes_data:
-            note_content = note.get("content") or note.get("note")
-            if note_content:
-                ArchitecturalNote.objects.create(
+                reminder_obj = reminder_serializer.save(
                     company=company_obj,
-                    note=note_content,
-                    created_by=added_by_user
+                    assigned_to=assigned_to_user
                 )
+
+            # 🔔 CREATE NOTIFICATION
+            ArchitecturalNotification.objects.create(
+            sales_person=assigned_to_user,
+            company=company_obj,
+            reminder=reminder_obj,
+            message=f"Reminder to call {company_obj.company_name}"
+            )
+
+            # 📅 CREATE CALENDAR ENTRY
+            # Get the latest note for this company
+            latest_note = reminder_obj.company.notes.last()
+            description = latest_note.note if latest_note else ""
+
+            # Create calendar activity
+            ArchitecturalCalendarActivity.objects.create(
+            company=company_obj,
+            user=assigned_to_user,
+            related_reminder=reminder_obj,
+            title="Customer Follow-up",
+            activity_date=reminder_obj.reminder_date,
+            description=description  # use description here
+            )
+
+
+            # Notes
+            added_by_id = request.data.get("added_by")
+            added_by_user = get_object_or_404(User, id=added_by_id) if added_by_id else None
+            for note in notes_data:
+                note_content = note.get("content") or note.get("note")
+                if note_content:
+                    ArchitecturalNote.objects.create(
+                        company=company_obj,
+                        note=note_content,
+                        created_by=added_by_user
+                    )
 
 
 class SalesRepDropdownAPI(APIView):
@@ -233,3 +297,148 @@ class SalesRepDropdownAPI(APIView):
         except Exception as e:
             print(f"Exception occurred: {e}")
             return ResponseFunction(0, str(e), {})
+
+# views.py
+
+# class SharedCalendarAPIView(ListAPIView):
+#     serializer_class = None  # manual response
+
+#     def get(self, request):
+#         qs = ArchitecturalCalendarActivity.objects.select_related(
+#             "company", "user", "related_reminder"
+#         )
+
+#         data = []
+#         for obj in qs:
+#             reminder = obj.related_reminder
+#             data.append({
+#                 "date": obj.activity_date,
+#                 "title": obj.title,
+#                 "company": {
+#                     "id": obj.company.id,
+#                     "name": obj.company.name,
+#                 },
+#                 "salesperson": {
+#                     "id": obj.user.id,
+#                     "name": obj.user.get_full_name(),
+#                 },
+#                 "reminder": {
+#                     "id": reminder.id if reminder else None,
+#                     "date": reminder.reminder_date if reminder else None,
+#                     "frequency": reminder.frequency if reminder else None,
+#                     "note": reminder.note if reminder else None,
+#                     "completed": reminder.completed if reminder else None,
+#                     "assigned_to": {
+#                         "id": reminder.assigned_to.id,
+#                         "name": reminder.assigned_to.get_full_name()
+#                     } if reminder else None
+#                 } if reminder else None,
+#                 "notes": list(obj.company.notes.values("id", "note"))
+#             })
+
+#         return ResponseFunction(1, "Calendar fetched", data)
+
+class SharedCalendarAPIView(ListAPIView):
+    serializer_class = ArchitecturalCalendarSerializer
+    queryset = ArchitecturalCalendarActivity.objects.all()
+
+  
+    
+class MyNotificationsAPIView(ListAPIView):
+    serializer_class = ArchitecturalNotificationSerializer
+    queryset=ArchitecturalNotification.objects.all()
+
+# def get_queryset(self):
+#     return ArchitecturalNotification.objects.filter(
+#         user=self.request.user
+#     ).order_by("-created_at")
+    
+        
+class AcknowledgeReminderAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
+
+    def post(self, request, reminder_id):
+        note = request.data.get("note")
+        if not note:
+            return ResponseFunction(0, "Notes are mandatory", {})
+
+        reminder = get_object_or_404(ArchitecturalReminder, id=reminder_id)
+
+        # 🔒 Ownership check
+        if reminder.assigned_to_id != request.user.id:
+            print("Reminder assigned_to:", reminder.assigned_to_id)
+            print("Request user:", request.user, request.user.id)
+
+            return ResponseFunction(0, "You cannot complete this reminder", {})
+
+        if reminder.status != 'Pending':
+            return ResponseFunction(0, "Reminder is not pending", {})
+
+        # Save note
+        ArchitecturalNote.objects.create(
+            company=reminder.company,
+            note=note,
+            created_by=request.user
+        )
+
+        # Complete reminder
+        reminder.status = 'Completed'
+        reminder.completed_at = timezone.now()
+        reminder.save()
+
+        # Mark notification read
+        ArchitecturalNotification.objects.filter(
+            reminder=reminder,
+            sales_person=request.user
+        ).update(read=True)
+
+        # 🔁 Auto-create next reminder
+        create_next_recurring_reminder(reminder)
+
+        return ResponseFunction(1, "Reminder completed", {})
+
+    
+
+
+
+class MyRemindersAPIView(ListAPIView):
+    serializer_class = ArchitecturalReminderSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # CEO can see all reminders (read-only)
+        if hasattr(user, 'role') and user.role.name == 'CEO':
+            return ArchitecturalReminder.objects.all().order_by("reminder_date")
+
+        # Sales Rep sees only their reminders
+        return ArchitecturalReminder.objects.filter(
+            assigned_to=user
+        ).order_by("reminder_date")
+
+
+class CompanyRemindersAPIView(ListAPIView):
+    serializer_class = ArchitecturalReminderSerializer
+
+    def get_queryset(self):
+        company_id = self.kwargs.get("company_id")
+        return ArchitecturalReminder.objects.filter(
+            company__id=company_id
+        ).order_by("reminder_date")
+
+
+class ArchitecturalCategoriesAPIView(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        categories = [
+            {"name": "Existing", "sub_categories": [c[0] for c in ArchitecturalCustomer.CATEGORY_CHOICES]},
+            {"name": "Potential", "sub_categories": [c[0] for c in ArchitecturalCustomer.CATEGORY_CHOICES]},
+            {"name": "Lead Status", "sub_categories": [c[0] for c in ArchitecturalCustomer.LEAD_STATUS_CHOICES]},
+            {"name": "Project Status", "sub_categories": [c[0] for c in ArchitecturalCustomer.PROJECT_STATUS_CHOICES]},
+        ]
+        return ResponseFunction(1, "Categories fetched", categories)
+

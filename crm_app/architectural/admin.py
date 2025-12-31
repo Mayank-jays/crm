@@ -1,78 +1,130 @@
 from django.contrib import admin
 from .models import (
-    ArchitecturalCompany,
+    ArchitecturalCustomer,
     ArchitecturalContact,
     ArchitecturalNote,
     ArchitecturalProject,
     ArchitecturalReminder,
-    ArchitecturalCalendarActivity
+    ArchitecturalCalendarActivity,
+    ArchitecturalNotification,
 )
 
-# ----------------------------
-# Architectural Company Admin
-# ----------------------------
-class ArchitecturalCompanyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'company_type', 'added_by', 'created_at')
-    search_fields = ('name', 'phone', 'email')
-    list_filter = ('company_type', 'lead_status', 'project_status')
-    ordering = ('-created_at',)
 
-admin.site.register(ArchitecturalCompany, ArchitecturalCompanyAdmin)
+# ----------------------------
+# Architectural Customer Admin
+# ----------------------------
+@admin.register(ArchitecturalCustomer)
+class ArchitecturalCustomerAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'company_name',
+        'category',
+        'lead_status',
+        'project_status',
+        'added_by',
+        'created_at',
+    )
+    search_fields = ('company_name', 'phone', 'email')
+    list_filter = ('category', 'lead_status', 'project_status')
+    ordering = ('-created_at',)
 
 
 # ----------------------------
 # Architectural Contact Admin
 # ----------------------------
+@admin.register(ArchitecturalContact)
 class ArchitecturalContactAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'role', 'company', 'phone', 'email')
     search_fields = ('name', 'phone', 'email')
-    list_filter = ('role',)
     ordering = ('-id',)
-
-admin.site.register(ArchitecturalContact, ArchitecturalContactAdmin)
 
 
 # ----------------------------
 # Architectural Note Admin
 # ----------------------------
+@admin.register(ArchitecturalNote)
 class ArchitecturalNoteAdmin(admin.ModelAdmin):
     list_display = ('id', 'company', 'created_by', 'created_at')
     search_fields = ('note',)
     ordering = ('-created_at',)
 
-admin.site.register(ArchitecturalNote, ArchitecturalNoteAdmin)
-
 
 # ----------------------------
 # Architectural Project Admin
 # ----------------------------
+@admin.register(ArchitecturalProject)
 class ArchitecturalProjectAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'company', 'status')
-    search_fields = ('name', 'company__name')
+    search_fields = ('name', 'company__company_name')
     list_filter = ('status',)
     ordering = ('-id',)
-
-admin.site.register(ArchitecturalProject, ArchitecturalProjectAdmin)
 
 
 # ----------------------------
 # Architectural Reminder Admin
 # ----------------------------
+@admin.register(ArchitecturalReminder)
 class ArchitecturalReminderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'company', 'frequency', 'reminder_date', 'completed')
-    list_filter = ('frequency', 'completed')
+    list_display = (
+        'id',
+        'company',
+        'project',
+        'assigned_to',
+        'frequency',
+        'reminder_date',
+        'status',
+        'completed_at',
+    )
+
+    list_filter = (
+        'status',
+        'frequency',
+        'assigned_to',
+    )
+
+    search_fields = (
+        'company__company_name',
+        'assigned_to__username',
+    )
+
     ordering = ('-reminder_date',)
 
-admin.site.register(ArchitecturalReminder, ArchitecturalReminderAdmin)
-
+    readonly_fields = (
+        'completed_at',
+        'created_at',
+    )
 
 
 # ----------------------------
 # Architectural Calendar Activity Admin
 # ----------------------------
+@admin.register(ArchitecturalCalendarActivity)
 class ArchitecturalCalendarActivityAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'activity_date', 'company', 'created_at')
+    list_display = (
+        'id',
+        'activity_date',
+        'company',
+        'user',
+        'related_reminder',
+        'created_at',
+    )
     search_fields = ('description',)
     ordering = ('-activity_date',)
 
-admin.site.register(ArchitecturalCalendarActivity, ArchitecturalCalendarActivityAdmin)
+
+# ----------------------------
+# Architectural Notification Admin
+# ----------------------------
+@admin.register(ArchitecturalNotification)
+class ArchitecturalNotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'sales_person',
+        'company',
+        'reminder',
+        'read',
+        'created_at',
+    )
+    list_filter = ('read',)
+    search_fields = ('company__company_name',)
+    ordering = ('-created_at',)
