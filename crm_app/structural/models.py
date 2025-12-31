@@ -179,4 +179,4 @@ class StructuralNotification(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user} - {self.company.company_name}"
+        return f"{self.sales_person} - {self.company.company_name}"
