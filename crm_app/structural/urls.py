@@ -18,5 +18,6 @@ urlpatterns = [
     path('structural/notifications/', MyNotificationsAPIView.as_view(), name='structural-my-notifications'),
     path('structural/reminders/<int:reminder_id>/acknowledge/', AcknowledgeReminderAPIView.as_view(), name='acknowledge-reminder'),
     path('structural/my-reminders/', MyRemindersAPIView.as_view(), name='my-reminders')
+    path('structural/clients/category/', StructuralCategoriesAPIView.as_view(), name='structural-company-category'),
     
 ]
