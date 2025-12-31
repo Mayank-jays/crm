@@ -6,8 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 import json
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+
 from rest_framework.views import APIView
-from .utils import create_next_recurring_reminder
+from .utils import *
 
 from django_solvitize.utils.GlobalImports import TokenAuthentication
 from rest_framework.authentication import TokenAuthentication as DRFTokenAuthentication, get_authorization_header
@@ -353,7 +355,8 @@ class MyNotificationsAPIView(ListAPIView):
     
         
 class AcknowledgeReminderAPIView(APIView):
-    #permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
 
     def post(self, request, reminder_id):
         note = request.data.get("note")
@@ -363,7 +366,10 @@ class AcknowledgeReminderAPIView(APIView):
         reminder = get_object_or_404(StructuralReminder, id=reminder_id)
 
         # 🔒 Ownership check
-        if reminder.assigned_to != request.user:
+        if reminder.assigned_to_id != request.user.id:
+            print("Reminder assigned_to:", reminder.assigned_to_id)
+            print("Request user:", request.user, request.user.id)
+
             return ResponseFunction(0, "You cannot complete this reminder", {})
 
         if reminder.status != 'Pending':
@@ -394,23 +400,7 @@ class AcknowledgeReminderAPIView(APIView):
 
     
 
-class BearerOrTokenAuthentication(DRFTokenAuthentication):
-    def authenticate(self, request):
-        raw = get_authorization_header(request)
-        if not raw:
-            return super().authenticate(request)
-        header = raw.decode('utf-8').strip()
-        lower = header.lower()
-        token_value = None
-        if lower.startswith('bearer '):
-            token_value = header.split(' ', 1)[1].strip()
-        elif lower.startswith('token '):
-            token_value = header.split(' ', 1)[1].strip()
-        if token_value:
-            if token_value.lower().startswith('token '):
-                token_value = token_value.split(' ', 1)[1].strip()
-            request.META['HTTP_AUTHORIZATION'] = f'Token {token_value}'
-        return super().authenticate(request)
+
 
 class MyRemindersAPIView(ListAPIView):
     serializer_class = StructuralReminderSerializer
