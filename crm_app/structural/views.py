@@ -360,45 +360,45 @@ class AcknowledgeReminderAPIView(APIView):
 
     def post(self, request, reminder_id):
         note = request.data.get("note")
+        stop_recurring = request.data.get("stop_recurring", False)
+
         if not note:
             return ResponseFunction(0, "Notes are mandatory", {})
 
         reminder = get_object_or_404(StructuralReminder, id=reminder_id)
+        
 
         # 🔒 Ownership check
         if reminder.assigned_to_id != request.user.id:
-            print("Reminder assigned_to:", reminder.assigned_to_id)
-            print("Request user:", request.user, request.user.id)
-
             return ResponseFunction(0, "You cannot complete this reminder", {})
 
-        if reminder.status != 'Pending':
+        if reminder.status != "Pending":
             return ResponseFunction(0, "Reminder is not pending", {})
 
-        # Save note
+        # 📝 Save note
         StructuralNote.objects.create(
             company=reminder.company,
             note=note,
             created_by=request.user
         )
 
-        # Complete reminder
-        reminder.status = 'Completed'
+        # ✅ Complete reminder
+        reminder.status = "Completed"
         reminder.completed_at = timezone.now()
+        reminder.stop_recurring = stop_recurring
         reminder.save()
 
-        # Mark notification read
+        # 🔔 Mark notification as read
         StructuralNotification.objects.filter(
             reminder=reminder,
             sales_person=request.user
         ).update(read=True)
 
-        # 🔁 Auto-create next reminder
-        create_next_recurring_reminder(reminder)
+        # 🔁 Create next reminder ONLY if allowed
+        if reminder.frequency != "None" and not stop_recurring:
+            create_next_recurring_reminder(reminder)
 
-        return ResponseFunction(1, "Reminder completed", {})
-
-    
+        return ResponseFunction(1, "Reminder completed successfully", {})
 
 
 

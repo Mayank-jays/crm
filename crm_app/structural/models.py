@@ -131,7 +131,7 @@ class StructuralReminder(models.Model):
     )
 
     completed_at = models.DateTimeField(null=True, blank=True)
-
+    stop_recurring = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

@@ -31,7 +31,8 @@ def create_next_recurring_reminder(reminder):
         assigned_to=reminder.assigned_to,
         reminder_date=next_date,
         frequency=reminder.frequency,
-        status="Scheduled"   # 🔑 IMPORTANT
+        status="Scheduled",
+        stop_recurring=False  # 🔑 IMPORTANT
     )
 
 def process_today_reminders():
