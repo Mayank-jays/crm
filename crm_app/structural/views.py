@@ -368,33 +368,33 @@ class AcknowledgeReminderAPIView(APIView):
         reminder = get_object_or_404(StructuralReminder, id=reminder_id)
         
 
-        # 🔒 Ownership check
+        #  Ownership check
         if reminder.assigned_to_id != request.user.id:
             return ResponseFunction(0, "You cannot complete this reminder", {})
 
         if reminder.status != "Pending":
             return ResponseFunction(0, "Reminder is not pending", {})
 
-        # 📝 Save note
+        #  Save note
         StructuralNote.objects.create(
             company=reminder.company,
             note=note,
             created_by=request.user
         )
 
-        # ✅ Complete reminder
+        # Complete reminder
         reminder.status = "Completed"
         reminder.completed_at = timezone.now()
         reminder.stop_recurring = stop_recurring
         reminder.save()
 
-        # 🔔 Mark notification as read
+        #  Mark notification as read
         StructuralNotification.objects.filter(
             reminder=reminder,
             sales_person=request.user
         ).update(read=True)
 
-        # 🔁 Create next reminder ONLY if allowed
+        #  Create next reminder ONLY if allowed
         if reminder.frequency != "None" and not stop_recurring:
             create_next_recurring_reminder(reminder)
 
