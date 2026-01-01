@@ -290,7 +290,7 @@ class SalesRepDropdownAPI(APIView):
 
     def get(self, request):
         try:
-            sales_reps = User.objects.filter(role__name='Sales', is_active=True)
+            sales_reps = User.objects.filter(role__name='Sale', is_active=True)
             data = [{"id": rep.id, "name": rep.get_full_name() or rep.username} for rep in sales_reps]
             return ResponseFunction(1, "Sales reps fetched successfully", data)
 
