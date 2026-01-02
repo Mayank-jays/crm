@@ -340,12 +340,13 @@ class SharedCalendarAPIView(ListAPIView):
     
 class MyNotificationsAPIView(ListAPIView):
     serializer_class = StructuralNotificationSerializer
-    queryset=StructuralNotification.objects.all()
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
 
-# def get_queryset(self):
-#     return StructuralNotification.objects.filter(
-#         user=self.request.user
-#     ).order_by("-created_at")
+    def get_queryset(self):
+        return StructuralNotification.objects.filter(
+            user=self.request.user
+        ).order_by("-created_at")
     
         
 class AcknowledgeReminderAPIView(APIView):
@@ -389,7 +390,7 @@ class AcknowledgeReminderAPIView(APIView):
         ).update(read=True)
 
         #  Create next reminder ONLY if allowed
-        if reminder.frequency != "None" and not stop_recurring:
+        if reminder.frequency != "None" and  reminder.recurring:
             create_next_recurring_reminder(reminder)
 
         return ResponseFunction(1, "Reminder completed successfully", {})
@@ -414,14 +415,22 @@ class MyRemindersAPIView(ListAPIView):
         ).order_by("reminder_date")
 
 
-class CompanyRemindersAPIView(ListAPIView):
+class GetReminderByIDAPIView(ListAPIView):
     serializer_class = StructuralReminderSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
 
     def get_queryset(self):
-        company_id = self.kwargs.get("company_id")
-        return StructuralReminder.objects.filter(
-            company__id=company_id
-        ).order_by("reminder_date")
+        reminder_id = self.kwargs.get("reminder_id")  # use lowercase for convention
+        queryset = StructuralReminder.objects.filter(id=reminder_id)
+
+        # Optional: Only assigned user or CEO can see
+        user = self.request.user
+        if hasattr(user, 'role') and user.role.name != "CEO":
+            queryset = queryset.filter(assigned_to=user)
+
+        return queryset.order_by("reminder_date")
+
 
 
 class StructuralCategoriesAPIView(APIView):

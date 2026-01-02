@@ -32,7 +32,7 @@ def create_next_recurring_reminder(reminder):
         reminder_date=next_date,
         frequency=reminder.frequency,
         status="Scheduled",
-        stop_recurring=False  #  IMPORTANT
+        recurring=True  #  IMPORTANT
     )
 
         
