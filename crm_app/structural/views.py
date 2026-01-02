@@ -355,7 +355,7 @@ class AcknowledgeReminderAPIView(APIView):
 
     def post(self, request, reminder_id):
         note = request.data.get("note")
-        stop_recurring = request.data.get("stop_recurring", False)
+        recurring = request.data.get("recurring", False)
 
         if not note:
             return ResponseFunction(0, "Notes are mandatory", {})
@@ -380,7 +380,7 @@ class AcknowledgeReminderAPIView(APIView):
         # Complete reminder
         reminder.status = "Completed"
         reminder.completed_at = timezone.now()
-        reminder.stop_recurring = stop_recurring
+        reminder.recurring = recurring
         reminder.save()
 
         #  Mark notification as read
@@ -420,16 +420,10 @@ class GetReminderByIDAPIView(ListAPIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = (BearerOrTokenAuthentication,)
 
-    def get_queryset(self):
-        reminder_id = self.kwargs.get("reminder_id")  # use lowercase for convention
-        queryset = StructuralReminder.objects.filter(id=reminder_id)
-
-        # Optional: Only assigned user or CEO can see
-        user = self.request.user
-        if hasattr(user, 'role') and user.role.name != "CEO":
-            queryset = queryset.filter(assigned_to=user)
-
-        return queryset.order_by("reminder_date")
+    def get(self, request, reminder_id):
+        reminder = get_object_or_404(StructuralReminder, id=reminder_id)
+        data = self.serializer_class(reminder).data
+        return ResponseFunction(1, "Reminder fetched successfully", data)
 
 
 
