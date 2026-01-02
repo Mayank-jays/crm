@@ -24,9 +24,10 @@ def process_due_reminders():
 
             # Notification
             StructuralNotification.objects.create(
-                user=reminder.assigned_to,
+                sales_person=reminder.assigned_to,
+                company=reminder.company,
                 title="Reminder Due",
-                message=f"Reminder for {reminder.company.name}",
+                message=f"Reminder for {reminder.company.company_name}",
                 reminder=reminder
             )
 

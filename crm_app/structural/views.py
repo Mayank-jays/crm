@@ -246,13 +246,7 @@ class StructuralCustomerAPI(ListAPIView):
                     assigned_to=assigned_to_user
                 )
 
-            # 🔔 CREATE NOTIFICATION
-            StructuralNotification.objects.create(
-            sales_person=assigned_to_user,
-            company=company_obj,
-            reminder=reminder_obj,
-            message=f"Reminder to call {company_obj.company_name}"
-            )
+           
 
             # 📅 CREATE CALENDAR ENTRY
             # Get the latest note for this company
