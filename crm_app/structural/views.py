@@ -345,7 +345,7 @@ class MyNotificationsAPIView(ListAPIView):
 
     def get_queryset(self):
         return StructuralNotification.objects.filter(
-            user=self.request.user
+            sales_person=self.request.user
         ).order_by("-created_at")
     
         
