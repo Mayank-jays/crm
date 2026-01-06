@@ -430,7 +430,7 @@ class MyRemindersAPIView(ListAPIView):
         frequency = params.get("frequency")
 
         if status:
-            qs = qs.filter(status__iexact=status)   # ✅ case-insensitive
+            qs = qs.filter(status__iexact=status)   #  case-insensitive
 
         if reminder_date:
             qs = qs.filter(reminder_date=reminder_date)
@@ -439,7 +439,7 @@ class MyRemindersAPIView(ListAPIView):
             qs = qs.filter(assigned_to_id=assigned_to)
 
         if frequency:
-            qs = qs.filter(frequency__iexact=frequency)  # ✅ case-insensitive
+            qs = qs.filter(frequency__iexact=frequency)  #  case-insensitive
 
         return qs.order_by("reminder_date")
 
