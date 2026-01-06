@@ -218,7 +218,7 @@ class StructuralCustomerAPI(ListAPIView):
             if contact_id:
                 contact_obj = get_object_or_404(StructuralContact, id=contact_id)
                 contact_serializer = StructuralContactSerializer(contact_obj, data=contact, partial=True)
-                contact_serializer.is_valid(raise_exception=True)
+                contact_serializer.is_valid(raise_exception=True) 
                 contact_serializer.save()
             else:
                 contact_serializer = StructuralContactSerializer(data=contact)
@@ -334,7 +334,17 @@ class SalesRepDropdownAPI(APIView):
 
 class SharedCalendarAPIView(ListAPIView):
     serializer_class = StructuralCalendarSerializer
-    queryset = StructuralCalendarActivity.objects.all()
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role.name == "CEO":
+            return StructuralCalendarActivity.objects.all().order_by("activity_date")
+
+        return StructuralCalendarActivity.objects.filter(
+            user=user
+        ).order_by("activity_date")
 
   
     
@@ -404,15 +414,20 @@ class MyRemindersAPIView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        status = self.request.query_params.get("status")  
 
-        # CEO can see all reminders (read-only)
+        # Base queryset
         if hasattr(user, 'role') and user.role.name == 'CEO':
-            return StructuralReminder.objects.all().order_by("reminder_date")
+            qs = StructuralReminder.objects.all()
+        else:
+            qs = StructuralReminder.objects.filter(assigned_to=user)
 
-        # Sales Rep sees only their reminders
-        return StructuralReminder.objects.filter(
-            assigned_to=user
-        ).order_by("reminder_date")
+        # Apply status filter if provided
+        if status:
+            qs = qs.filter(status=status)
+
+        return qs.order_by("reminder_date")
+
 
 
 class GetReminderByIDAPIView(ListAPIView):
