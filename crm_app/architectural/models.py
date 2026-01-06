@@ -131,7 +131,7 @@ class ArchitecturalReminder(models.Model):
     )
 
     completed_at = models.DateTimeField(null=True, blank=True)
-
+    recurring = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -160,17 +160,17 @@ class ArchitecturalNotification(models.Model):
     sales_person = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="architecturalnotifications"
+        related_name="architectural_notifications"
     )
     company = models.ForeignKey(
         ArchitecturalCustomer,
         on_delete=models.CASCADE,
-        related_name="architectural_notifications"
+        related_name="notifications"
     )
     reminder = models.ForeignKey(
         ArchitecturalReminder,
         on_delete=models.CASCADE,
-        related_name="architecturalnotifications"
+        related_name="notifications"
     )
 
     title = models.CharField(max_length=255)

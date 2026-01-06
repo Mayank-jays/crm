@@ -9,11 +9,7 @@ from .views import (
     GetReminderByIDAPIView,
     StructuralCategoriesAPIView
 )
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularSwaggerView,
-    SpectacularRedocView,
-)
+
 
 urlpatterns = [
     path('structural/clients/', StructuralCustomerAPI.as_view(), name='structural-company-list'),  # GET list / POST create
@@ -26,8 +22,6 @@ urlpatterns = [
     path('structural/reminders/', MyRemindersAPIView.as_view(), name='my-reminders'),
     path('structural/reminders/<int:reminder_id>/', GetReminderByIDAPIView.as_view(), name='get-reminder-by-id'),
     path('structural/clients/category/', StructuralCategoriesAPIView.as_view(), name='structural-company-category'),
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema')),
+    
     
 ]

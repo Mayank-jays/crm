@@ -24,7 +24,11 @@ from django.urls import include
 
 from jaysmetal_backend import settings
 from django.conf.urls.static import static
-
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
 
 from django.http import JsonResponse
 def health_check(request):
@@ -71,6 +75,9 @@ urlpatterns = [
     path('reports/', include('reports_app.urls')),
     path('crm/', include('crm_app.structural.urls')),
     path('crm/', include('crm_app.architectural.urls')),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema')),
 
     
 ]

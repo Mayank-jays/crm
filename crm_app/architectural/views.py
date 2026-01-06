@@ -218,7 +218,7 @@ class ArchitecturalCustomerAPI(ListAPIView):
             if contact_id:
                 contact_obj = get_object_or_404(ArchitecturalContact, id=contact_id)
                 contact_serializer = ArchitecturalContactSerializer(contact_obj, data=contact, partial=True)
-                contact_serializer.is_valid(raise_exception=True)
+                contact_serializer.is_valid(raise_exception=True) 
                 contact_serializer.save()
             else:
                 contact_serializer = ArchitecturalContactSerializer(data=contact)
@@ -246,13 +246,7 @@ class ArchitecturalCustomerAPI(ListAPIView):
                     assigned_to=assigned_to_user
                 )
 
-            # 🔔 CREATE NOTIFICATION
-            ArchitecturalNotification.objects.create(
-            sales_person=assigned_to_user,
-            company=company_obj,
-            reminder=reminder_obj,
-            message=f"Reminder to call {company_obj.company_name}"
-            )
+           
 
             # 📅 CREATE CALENDAR ENTRY
             # Get the latest note for this company
@@ -290,7 +284,7 @@ class SalesRepDropdownAPI(APIView):
 
     def get(self, request):
         try:
-            sales_reps = User.objects.filter(role__name='Sales', is_active=True)
+            sales_reps = User.objects.filter(role__name='Sale', is_active=True)
             data = [{"id": rep.id, "name": rep.get_full_name() or rep.username} for rep in sales_reps]
             return ResponseFunction(1, "Sales reps fetched successfully", data)
 
@@ -340,18 +334,29 @@ class SalesRepDropdownAPI(APIView):
 
 class SharedCalendarAPIView(ListAPIView):
     serializer_class = ArchitecturalCalendarSerializer
-    queryset = ArchitecturalCalendarActivity.objects.all()
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role.name == "CEO":
+            return ArchitecturalCalendarActivity.objects.all().order_by("activity_date")
+
+        return ArchitecturalCalendarActivity.objects.filter(
+            user=user
+        ).order_by("activity_date")
 
   
     
 class MyNotificationsAPIView(ListAPIView):
     serializer_class = ArchitecturalNotificationSerializer
-    queryset=ArchitecturalNotification.objects.all()
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
 
-# def get_queryset(self):
-#     return ArchitecturalNotification.objects.filter(
-#         user=self.request.user
-#     ).order_by("-created_at")
+    def get_queryset(self):
+        return ArchitecturalNotification.objects.filter(
+            sales_person=self.request.user
+        ).order_by("-created_at")
     
         
 class AcknowledgeReminderAPIView(APIView):
@@ -360,22 +365,22 @@ class AcknowledgeReminderAPIView(APIView):
 
     def post(self, request, reminder_id):
         note = request.data.get("note")
+        recurring = request.data.get("recurring", False)
+
         if not note:
             return ResponseFunction(0, "Notes are mandatory", {})
 
         reminder = get_object_or_404(ArchitecturalReminder, id=reminder_id)
+        
 
-        # 🔒 Ownership check
+        #  Ownership check
         if reminder.assigned_to_id != request.user.id:
-            print("Reminder assigned_to:", reminder.assigned_to_id)
-            print("Request user:", request.user, request.user.id)
-
             return ResponseFunction(0, "You cannot complete this reminder", {})
 
-        if reminder.status != 'Pending':
+        if reminder.status != "Pending":
             return ResponseFunction(0, "Reminder is not pending", {})
 
-        # Save note
+        #  Save note
         ArchitecturalNote.objects.create(
             company=reminder.company,
             note=note,
@@ -383,24 +388,26 @@ class AcknowledgeReminderAPIView(APIView):
         )
 
         # Complete reminder
-        reminder.status = 'Completed'
+        reminder.status = "Completed"
         reminder.completed_at = timezone.now()
+        reminder.recurring = recurring
         reminder.save()
 
-        # Mark notification read
+        #  Mark notification as read
         ArchitecturalNotification.objects.filter(
             reminder=reminder,
             sales_person=request.user
         ).update(read=True)
 
-        # 🔁 Auto-create next reminder
-        create_next_recurring_reminder(reminder)
+        #  Create next reminder ONLY if allowed
+        if reminder.frequency != "None" and  reminder.recurring:
+            create_next_recurring_reminder(reminder)
 
-        return ResponseFunction(1, "Reminder completed", {})
-
-    
+        return ResponseFunction(1, "Reminder completed successfully", {})
 
 
+
+from django.core.exceptions import ValidationError
 
 class MyRemindersAPIView(ListAPIView):
     serializer_class = ArchitecturalReminderSerializer
@@ -409,25 +416,47 @@ class MyRemindersAPIView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        params = self.request.query_params
 
-        # CEO can see all reminders (read-only)
+        # Base queryset
         if hasattr(user, 'role') and user.role.name == 'CEO':
-            return ArchitecturalReminder.objects.all().order_by("reminder_date")
+            qs = ArchitecturalReminder.objects.all()
+        else:
+            qs = ArchitecturalReminder.objects.filter(assigned_to=user)
 
-        # Sales Rep sees only their reminders
-        return ArchitecturalReminder.objects.filter(
-            assigned_to=user
-        ).order_by("reminder_date")
+        status = params.get("status")
+        reminder_date = params.get("reminder_date")
+        assigned_to = params.get("assigned_to")
+        frequency = params.get("frequency")
+
+        if status:
+            qs = qs.filter(status__iexact=status)   #  case-insensitive
+
+        if reminder_date:
+            qs = qs.filter(reminder_date=reminder_date)
+
+        if assigned_to and user.role.name == "CEO":
+            qs = qs.filter(assigned_to_id=assigned_to)
+
+        if frequency:
+            qs = qs.filter(frequency__iexact=frequency)  #  case-insensitive
+
+        return qs.order_by("reminder_date")
 
 
-class CompanyRemindersAPIView(ListAPIView):
+
+
+
+class GetReminderByIDAPIView(ListAPIView):
     serializer_class = ArchitecturalReminderSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = (BearerOrTokenAuthentication,)
 
-    def get_queryset(self):
-        company_id = self.kwargs.get("company_id")
-        return ArchitecturalReminder.objects.filter(
-            company__id=company_id
-        ).order_by("reminder_date")
+    def get(self, request, reminder_id):
+        reminder = get_object_or_404(ArchitecturalReminder, id=reminder_id)
+        data = self.serializer_class(reminder).data
+        return ResponseFunction(1, "Reminder fetched successfully", data)
+
 
 
 class ArchitecturalCategoriesAPIView(APIView):

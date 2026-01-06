@@ -27,38 +27,14 @@ def create_next_recurring_reminder(reminder):
 
     return ArchitecturalReminder.objects.create(
         company=reminder.company,
-        project=getattr(reminder, "project", None),
+       # project=getattr(reminder, "project", None),
         assigned_to=reminder.assigned_to,
         reminder_date=next_date,
         frequency=reminder.frequency,
-        status="Scheduled"   # 🔑 IMPORTANT
+        status="Scheduled",
+        recurring=True  #  IMPORTANT
     )
 
-def process_today_reminders():
-    """
-    Move today's scheduled reminders to pending
-    and create notifications
-    """
-    today = timezone.now().date()
-
-    reminders = ArchitecturalReminder.objects.filter(
-        reminder_date=today,
-        status='Scheduled'
-    )
-
-    for r in reminders:
-        r.status = 'Pending'
-        r.save(update_fields=["status"])
-
-        # Avoid duplicate notifications
-        if not ArchitecturalNotification.objects.filter(reminder=r).exists():
-            ArchitecturalNotification.objects.create(
-                sales_person=r.assigned_to,
-                company=r.company,
-                reminder=r,
-                title="Reminder Due Today",
-                message=f"Follow-up for {r.company.company_name}"
-            )
         
 class BearerOrTokenAuthentication(DRFTokenAuthentication):
     def authenticate(self, request):
