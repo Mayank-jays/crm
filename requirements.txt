@@ -14,4 +14,4 @@ python-decouple==3.8
 requests==2.32.4
 sentry-sdk==2.28.0
 whitenoise
-
+drf-spectacular

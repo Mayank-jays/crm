@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'crm_app.structural',
     'crm_app.architectural',
     'crm_app.leads',
+    'drf_spectacular',
     
     
     # Third party apps
@@ -300,6 +301,10 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ],
     'PAGE_SIZE': 8,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.TokenAuthentication',
+    ),
 }
 
 
