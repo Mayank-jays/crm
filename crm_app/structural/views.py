@@ -424,25 +424,25 @@ class MyRemindersAPIView(ListAPIView):
         else:
             qs = StructuralReminder.objects.filter(assigned_to=user)
 
-        
         status = params.get("status")
         reminder_date = params.get("reminder_date")
         assigned_to = params.get("assigned_to")
         frequency = params.get("frequency")
 
         if status:
-            qs = qs.filter(status=status)
+            qs = qs.filter(status__iexact=status)   # ✅ case-insensitive
 
         if reminder_date:
             qs = qs.filter(reminder_date=reminder_date)
 
-        if assigned_to and user.role.name == "CEO":  #  only CEO can filter by user
+        if assigned_to and user.role.name == "CEO":
             qs = qs.filter(assigned_to_id=assigned_to)
 
         if frequency:
-            qs = qs.filter(frequency=frequency)
+            qs = qs.filter(frequency__iexact=frequency)  # ✅ case-insensitive
 
         return qs.order_by("reminder_date")
+
 
 
 
