@@ -407,6 +407,8 @@ class AcknowledgeReminderAPIView(APIView):
 
 
 
+from django.core.exceptions import ValidationError
+
 class MyRemindersAPIView(ListAPIView):
     serializer_class = StructuralReminderSerializer
     permission_classes = [IsAuthenticated]
@@ -414,7 +416,7 @@ class MyRemindersAPIView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        status = self.request.query_params.get("status")  
+        params = self.request.query_params
 
         # Base queryset
         if hasattr(user, 'role') and user.role.name == 'CEO':
@@ -422,11 +424,26 @@ class MyRemindersAPIView(ListAPIView):
         else:
             qs = StructuralReminder.objects.filter(assigned_to=user)
 
-        # Apply status filter if provided
+        
+        status = params.get("status")
+        reminder_date = params.get("reminder_date")
+        assigned_to = params.get("assigned_to")
+        frequency = params.get("frequency")
+
         if status:
             qs = qs.filter(status=status)
 
+        if reminder_date:
+            qs = qs.filter(reminder_date=reminder_date)
+
+        if assigned_to and user.role.name == "CEO":  #  only CEO can filter by user
+            qs = qs.filter(assigned_to_id=assigned_to)
+
+        if frequency:
+            qs = qs.filter(frequency=frequency)
+
         return qs.order_by("reminder_date")
+
 
 
 
