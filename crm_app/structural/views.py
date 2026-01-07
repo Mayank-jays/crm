@@ -5,9 +5,10 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 import json
+from core_app.constants import NON_DB_FIELDS as non_db_fields
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-
+from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from .utils import *
 
@@ -407,7 +408,7 @@ class AcknowledgeReminderAPIView(APIView):
 
 
 
-from django.core.exceptions import ValidationError
+
 
 class MyRemindersAPIView(ListAPIView):
     serializer_class = StructuralReminderSerializer
@@ -471,3 +472,102 @@ class StructuralCategoriesAPIView(APIView):
         ]
         return ResponseFunction(1, "Categories fetched", categories)
 
+class StructuralContactAPI(ListAPIView):
+    serializer_class = StructuralContactSerializer
+    model = StructuralContact
+
+    # =========================
+    # UPDATE CONTACT (PUT)
+    # =========================
+    def put(self, request, format=None):
+        try:
+            id = self.request.GET.get("id")
+
+            if not id:
+                return ResponseFunction(0, "Contact id is required", {})
+
+            contact = self.model.objects.filter(id=id).first()
+            if not contact:
+                return ResponseFunction(0, "Contact not found", {})
+
+            serializer = self.serializer_class(
+                contact,
+                data=request.data,
+                partial=True,
+                context={'request': request}
+            )
+
+            serializer.is_valid(raise_exception=True)
+            obj = serializer.save()
+
+            return ResponseFunction(1, "Contact updated successfully", self.serializer_class(obj).data)
+
+        except ValidationError as e:
+            return ResponseFunction(0, str(e), {})
+        except Exception as e:
+            print(f"Exception occurred {e} at {printLineNo()}")
+            return ResponseFunction(0, str(e), {})
+
+    # =========================
+    # LIST CONTACTS (GET)
+    # =========================
+    def get_queryset(self):
+        print("Get {}".format(self.model.__name__))
+        print(f"Request params: {self.request.GET}")
+
+        qs = self.model.objects.select_related("company").all()
+
+        # ---- serializer flags ----
+        pagination = self.request.GET.get('pagination', '1')
+        exclude_id_list = json.loads(self.request.GET.get('exclude_id_list', '[]'))
+
+        if pagination == '0':
+            self.pagination_class = None
+
+
+        # ---- filtering ----
+        filters = {}
+        all_keys = list(self.request.GET.keys())
+        direct_fields = list(set(all_keys) - set(non_db_fields))
+
+        for field in direct_fields:
+            value = self.request.GET.get(field)
+
+            if value not in [None, ""]:
+                if field == "name":
+                    filters["name__icontains"] = value
+                elif field == "company":
+                    filters["company_id"] = value
+                elif field == "is_active":
+                    filters["is_active"] = get_bool_value(value)
+                elif field in ["created_at"]:
+                    filters[field + "__date"] = value
+                else:
+                    filters[field] = value
+
+        if exclude_id_list:
+            qs = qs.filter(**filters).exclude(id__in=exclude_id_list)
+        else:
+            qs = qs.filter(**filters)
+
+        return qs.order_by("-id")
+
+    # =========================
+    # DELETE CONTACT
+    # =========================
+    def delete(self, request):
+        try:
+            id = self.request.GET.get('id', "[]")
+
+            if id == "all":
+                self.model.objects.all().delete()
+                return ResponseFunction(1, "All contacts deleted", {})
+
+         #   id = json.loads(id)
+            self.model.objects.filter(id__in=id).delete()
+
+            return ResponseFunction(1, f"Deleted contacts with id {id}", {})
+
+        except Exception as e:
+            print(f"Exception occurred {e} at {printLineNo()}")
+            return ResponseFunction(0, str(e), {})

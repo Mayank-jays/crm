@@ -7,7 +7,8 @@ from .views import (
     AcknowledgeReminderAPIView,
     MyRemindersAPIView,
     GetReminderByIDAPIView,
-    StructuralCategoriesAPIView
+    StructuralCategoriesAPIView,
+    StructuralContactAPI
 )
 
 
@@ -22,6 +23,6 @@ urlpatterns = [
     path('structural/reminders/', MyRemindersAPIView.as_view(), name='my-reminders'),
     path('structural/reminders/<int:reminder_id>/', GetReminderByIDAPIView.as_view(), name='get-reminder-by-id'),
     path('structural/clients/category/', StructuralCategoriesAPIView.as_view(), name='structural-company-category'),
-    
+    path('structural/contacts/', StructuralContactAPI.as_view(), name='structural-contact-list'),
     
 ]
