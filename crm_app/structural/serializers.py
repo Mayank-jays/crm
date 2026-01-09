@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import StructuralCustomer, StructuralContact, StructuralNote, StructuralReminder, StructuralNotification, StructuralCalendarActivity
+from .models import StructuralCustomer, StructuralContact, StructuralNote, StructuralReminder, StructuralNotification, StructuralCalendarActivity, StructuralReminderLog
 
 User = get_user_model()
 
@@ -33,6 +33,26 @@ class StructuralNoteSerializer(serializers.ModelSerializer):
         return None
 
 
+class StructuralReminderLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StructuralReminderLog
+        fields = (
+            'id',
+            "occurrence_no",
+            "note",
+            "completed_at",
+            "created_at",
+            "completed_by",
+        )
+
+def get_completed_by(self, obj):
+        if obj.completed_by:
+            return {
+                "id": obj.completed_by.id,
+                "name": obj.completed_by.get_full_name() or obj.completed_by.username
+            }
+        return None
+
 # ----------------------------
 # Reminder Serializer
 # ----------------------------
@@ -40,9 +60,10 @@ class StructuralReminderSerializer(serializers.ModelSerializer):
     assigned_to_detail = serializers.SerializerMethodField(read_only=True)
     assigned_to = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
     notes = serializers.SerializerMethodField()
+    logs = StructuralReminderLogSerializer(many=True, read_only=True)
     class Meta:
         model = StructuralReminder
-        fields = ('id', 'assigned_to', 'assigned_to_detail', 'reminder_date', 'frequency', 'status', 'notes')
+        fields = ('id', 'assigned_to', 'assigned_to_detail', 'reminder_date', 'frequency', 'status', 'notes', 'logs')
         read_only_fields = ('id','status')
 
     def get_assigned_to_detail(self, obj):
@@ -244,4 +265,22 @@ class StructuralCalendarSerializer(serializers.ModelSerializer):
             } if r.assigned_to else None,
         }
 
+class StructuralReminderLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StructuralReminderLog
+        fields = (
+            'id',
+            "occurrence_no",
+            "note",
+            "completed_at",
+            "created_at",
+            "completed_by",
+        )
 
+def get_completed_by(self, obj):
+        if obj.completed_by:
+            return {
+                "id": obj.completed_by.id,
+                "name": obj.completed_by.get_full_name() or obj.completed_by.username
+            }
+        return None

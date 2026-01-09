@@ -2,12 +2,10 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django_solvitize.utils.GlobalImports import TokenAuthentication as DRFTokenAuthentication
 from rest_framework.authentication import get_authorization_header
-
-from .models import StructuralReminder
 from .models import StructuralReminder, StructuralNotification
 
 
-def create_next_recurring_reminder(reminder):
+def move_reminder_to_next_date(reminder):
     """
     Auto-create next recurring reminder after completion
     """
@@ -23,17 +21,12 @@ def create_next_recurring_reminder(reminder):
 
     else:
         # Custom / None → no recurrence
-        return None
-
-    return StructuralReminder.objects.create(
-        company=reminder.company,
-       # project=getattr(reminder, "project", None),
-        assigned_to=reminder.assigned_to,
-        reminder_date=next_date,
-        frequency=reminder.frequency,
-        status="Scheduled",
-        recurring=True  #  IMPORTANT
-    )
+        return 
+    
+    reminder.status = "Scheduled"
+    reminder.completed_at = None
+    reminder.reminder_date = next_date
+    reminder.save(update_fields=["reminder_date", "status", "completed_at"])
 
         
 class BearerOrTokenAuthentication(DRFTokenAuthentication):

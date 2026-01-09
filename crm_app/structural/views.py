@@ -11,10 +11,10 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from rest_framework.views import APIView
 from .utils import *
-
+from django.db import transaction
 from django_solvitize.utils.GlobalImports import TokenAuthentication
 from rest_framework.authentication import TokenAuthentication as DRFTokenAuthentication, get_authorization_header
-from .models import StructuralCustomer, StructuralContact, StructuralNote, StructuralReminder, StructuralNotification, StructuralCalendarActivity
+from .models import StructuralCustomer, StructuralContact, StructuralNote, StructuralReminder, StructuralNotification, StructuralCalendarActivity, StructuralReminderLog
 from .serializers import (
     StructuralCustomerSerializer,
     StructuralContactSerializer,
@@ -360,6 +360,7 @@ class MyNotificationsAPIView(ListAPIView):
         ).order_by("-created_at")
     
         
+
 class AcknowledgeReminderAPIView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = (BearerOrTokenAuthentication,)
@@ -372,41 +373,49 @@ class AcknowledgeReminderAPIView(APIView):
             return ResponseFunction(0, "Notes are mandatory", {})
 
         reminder = get_object_or_404(StructuralReminder, id=reminder_id)
-        
 
-        #  Ownership check
         if reminder.assigned_to_id != request.user.id:
             return ResponseFunction(0, "You cannot complete this reminder", {})
 
         if reminder.status != "Pending":
             return ResponseFunction(0, "Reminder is not pending", {})
 
-        #  Save note
-        StructuralNote.objects.create(
-            company=reminder.company,
-            note=note,
-            created_by=request.user
-        )
+        with transaction.atomic():
 
-        # Complete reminder
-        reminder.status = "Completed"
-        reminder.completed_at = timezone.now()
-        reminder.recurring = recurring
-        reminder.save()
+            #  1. CREATE LOG (HISTORY)
+            StructuralReminderLog.objects.create(
+                reminder=reminder,
+                occurrence_no=reminder.logs.count() + 1,
+                note=note,
+                completed_at=timezone.now(),
+                completed_by=request.user
+                )
 
-        #  Mark notification as read
-        StructuralNotification.objects.filter(
-            reminder=reminder,
-            sales_person=request.user
-        ).update(read=True)
 
-        #  Create next reminder ONLY if allowed
-        if reminder.frequency != "None" and  reminder.recurring:
-            create_next_recurring_reminder(reminder)
+            #  2. SAVE NOTE (customer level)
+            StructuralNote.objects.create(
+                company=reminder.company,
+                note=note,
+                created_by=request.user
+            )
+
+            #  3. MARK COMPLETED (TEMP)
+            reminder.status = "Completed"
+            reminder.completed_at = timezone.now()
+            reminder.recurring = recurring
+            reminder.save()
+
+            #  4. MOVE DATE FOR RECURRING
+            if reminder.frequency != "None" and reminder.recurring:
+                move_reminder_to_next_date(reminder)
+
+            #  5. MARK NOTIFICATION READ
+            StructuralNotification.objects.filter(
+                reminder=reminder,
+                sales_person=request.user
+            ).update(read=True)
 
         return ResponseFunction(1, "Reminder completed successfully", {})
-
-
 
 
 

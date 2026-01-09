@@ -180,3 +180,23 @@ class StructuralNotification(models.Model):
 
     def __str__(self):
         return f"{self.sales_person} - {self.company.company_name}"
+
+
+class StructuralReminderLog(models.Model):
+    reminder = models.ForeignKey(
+        StructuralReminder,
+        on_delete=models.CASCADE,
+        related_name="logs"
+    )
+    occurrence_no = models.PositiveIntegerField()
+    note = models.TextField()
+    completed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+
+    def __str__(self):
+        return f"Reminder {self.reminder.id} - Occurrence {self.occurrence_no}"

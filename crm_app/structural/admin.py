@@ -7,6 +7,7 @@ from .models import (
     StructuralReminder,
     StructuralCalendarActivity,
     StructuralNotification,
+    StructuralReminderLog,
 )
 
 
@@ -128,3 +129,21 @@ class StructuralNotificationAdmin(admin.ModelAdmin):
     list_filter = ('read',)
     search_fields = ('company__company_name',)
     ordering = ('-created_at',)
+
+
+@admin.register(StructuralReminderLog)
+class StructuralReminderLogAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'reminder',
+        'occurrence_no',
+        'note',
+        'completed_at',
+        'created_at',
+        'completed_by'
+    )
+    search_fields = (
+        'reminder__company__company_name',
+    )
+    ordering = ('-created_at',)
+
