@@ -1,20 +1,41 @@
+# Django imports
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from rest_framework.generics import ListAPIView
-from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
-import json
-from core_app.constants import NON_DB_FIELDS as non_db_fields
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+
+# DRF imports
 from rest_framework.views import APIView
-from .utils import *
-from django.db import transaction
-from django_solvitize.utils.GlobalImports import TokenAuthentication
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.authentication import TokenAuthentication as DRFTokenAuthentication, get_authorization_header
-from .models import StructuralCustomer, StructuralContact, StructuralNote, StructuralReminder, StructuralNotification, StructuralCalendarActivity, StructuralReminderLog
+
+# Standard library
+import json
+import calendar
+from datetime import date
+
+# Local utils and constants
+from .utils import *
+from core_app.constants import NON_DB_FIELDS as non_db_fields
+from core_app.utils import ValidateRequest, get_bool_value
+from django_solvitize.utils.GlobalFunctions import ResponseFunction, printLineNo
+
+# Models (all in one clean import)
+from .models import (
+    StructuralCustomer,
+    StructuralContact,
+    StructuralNote,
+    StructuralReminder,
+    StructuralNotification,
+    StructuralCalendarActivity,
+    StructuralReminderLog
+)
+
+# Serializers
 from .serializers import (
     StructuralCustomerSerializer,
     StructuralContactSerializer,
@@ -23,10 +44,10 @@ from .serializers import (
     StructuralNotificationSerializer,
     StructuralCalendarSerializer
 )
-from core_app.utils import ValidateRequest, get_bool_value
-from django_solvitize.utils.GlobalFunctions import ResponseFunction, printLineNo
 
+# Get the user model
 User = get_user_model()
+
 
 
 class StructuralCustomerAPI(ListAPIView):
@@ -257,7 +278,7 @@ class StructuralCustomerAPI(ListAPIView):
             # Create calendar activity
             StructuralCalendarActivity.objects.create(
             company=company_obj,
-            user=assigned_to_user,
+            user=request.user,
             related_reminder=reminder_obj,
             title="Customer Follow-up",
             activity_date=reminder_obj.reminder_date,
@@ -336,23 +357,38 @@ class SalesRepDropdownAPI(APIView):
 class SharedCalendarAPIView(ListAPIView):
     serializer_class = StructuralCalendarSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
 
-        if user.role.name == "CEO":
-            return StructuralCalendarActivity.objects.all().order_by("activity_date")
+        # 1️⃣ Get month/year (default: current month)
+        today = timezone.now().date()
+        year = int(self.request.query_params.get("year", today.year))
+        month = int(self.request.query_params.get("month", today.month))
 
-        return StructuralCalendarActivity.objects.filter(
-            user=user
-        ).order_by("activity_date")
+        # 2️⃣ Calculate month range
+        start_date = date(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = date(year, month, last_day)
 
-  
-    
+        # 3️⃣ Base queryset
+        qs = StructuralCalendarActivity.objects.filter(
+            activity_date__range=(start_date, end_date)
+        )
+
+        # 4️⃣ Role-based visibility
+        if user.role.name != "CEO":
+            qs = qs.filter(user=user)
+
+        return qs.order_by("activity_date")
+        
+        
 class MyNotificationsAPIView(ListAPIView):
     serializer_class = StructuralNotificationSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = (BearerOrTokenAuthentication,)
+    pagination_class = None
 
     def get_queryset(self):
         return StructuralNotification.objects.filter(
@@ -410,10 +446,10 @@ class AcknowledgeReminderAPIView(APIView):
                 move_reminder_to_next_date(reminder)
 
             #  5. MARK NOTIFICATION READ
-            StructuralNotification.objects.filter(
-                reminder=reminder,
-                sales_person=request.user
-            ).update(read=True)
+            # StructuralNotification.objects.filter(
+            #     reminder=reminder,
+            #     sales_person=request.user
+            # ).update(read=True)
 
         return ResponseFunction(1, "Reminder completed successfully", {})
 
@@ -480,3 +516,90 @@ class StructuralCategoriesAPIView(APIView):
             {"name": "Project Status", "sub_categories": [c[0] for c in StructuralCustomer.PROJECT_STATUS_CHOICES]},
         ]
         return ResponseFunction(1, "Categories fetched", categories)
+
+
+class AddCalendarNotesAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        required = ["sales_person", "activity", "notes"]
+        errors = ValidateRequest(required, request.data)
+        if errors:
+            return ResponseFunction(0, errors[0]["error"], {})
+
+        # company = get_object_or_404(
+        #     StructuralCustomer,
+        #     id=request.data["company_id"]
+        # )
+
+        activity = StructuralCalendarActivity.objects.create(
+            sales_person=request.user,
+            activity=request.data["activity"],
+            notes=request.data.get("description", "")
+        )
+
+        return ResponseFunction(1, "Activity added", {"id": activity.id})
+
+class MarkNotificationReadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, notification_id):
+        notification = get_object_or_404(
+            StructuralNotification,
+            id=notification_id,
+            sales_person=request.user
+        )
+
+        if not notification.read:
+            notification.read = True
+            notification.save(update_fields=["read"])
+
+        return ResponseFunction(1, "Notification marked as read", {})
+
+
+class CombinedCalendarAPIView(APIView):
+    #permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        activities = (
+            StructuralCalendarActivity.objects
+            .select_related("company", "user", "related_reminder")
+            .prefetch_related("company__notes")
+            .order_by("-activity_date")
+        )
+
+        response = []
+
+        for activity in activities:
+            reminder = activity.related_reminder
+            company = activity.company
+
+            response.append({
+                "calendar_id": activity.id,
+                "date": activity.activity_date,
+                "title": activity.title,
+
+                "company": {
+                    "id": company.id,
+                    "name": company.company_name
+                },
+
+                "assigned_to": {
+                    "id": activity.user.id,
+                    "name": activity.user.get_full_name() or activity.user.username
+                },
+
+                "reminder": {
+                    "id": reminder.id if reminder else None,
+                    "frequency": reminder.frequency if reminder else None,
+                    "status": reminder.status if reminder else None
+                } if reminder else None,
+
+                "notes": list(
+                    company.notes.order_by("-created_at").values(
+                        "id", "note", "created_by__username"
+                    )
+                )
+            })
+
+        return ResponseFunction(1, "Calendar data fetched", response)

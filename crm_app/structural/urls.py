@@ -8,7 +8,10 @@ from .views import (
     MyRemindersAPIView,
     GetReminderByIDAPIView,
     StructuralCategoriesAPIView,
-
+    StructuralCalendarActivity,
+    MarkNotificationReadAPIView,
+    CombinedCalendarAPIView,
+    AddCalendarNotesAPIView,
 )
 
 
@@ -23,6 +26,7 @@ urlpatterns = [
     path('structural/reminders/', MyRemindersAPIView.as_view(), name='my-reminders'),
     path('structural/reminders/<int:reminder_id>/', GetReminderByIDAPIView.as_view(), name='get-reminder-by-id'),
     path('structural/clients/category/', StructuralCategoriesAPIView.as_view(), name='structural-company-category'),
-    
-    
+    path('structural/notifications/<int:notification_id>/read/', MarkNotificationReadAPIView.as_view(), name='mark-notification-read'),
+    path('structural/combined-calendar/', CombinedCalendarAPIView.as_view(), name='combined-calendar'),
+    path('structural/calendar/add-notes/', AddCalendarNotesAPIView.as_view(), name='add-calendar-notes'),
 ]

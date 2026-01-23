@@ -165,7 +165,6 @@ class StructuralNotificationSerializer(serializers.ModelSerializer):
         model = StructuralNotification
         fields = (
             "id",
-            "message",
             "is_read",
             "company",
             "company_detail",
@@ -209,7 +208,7 @@ class StructuralCalendarSerializer(serializers.ModelSerializer):
     date = serializers.DateField(source="activity_date", read_only=True)
 
     company_detail = serializers.SerializerMethodField()
-    salesperson = serializers.SerializerMethodField()
+    sales_person = serializers.SerializerMethodField()
     reminder_detail = serializers.SerializerMethodField()
     notes = serializers.SerializerMethodField()
 
@@ -217,9 +216,8 @@ class StructuralCalendarSerializer(serializers.ModelSerializer):
         model = StructuralCalendarActivity
         fields = (
             "date",
-            "title",
             "company_detail",
-            "salesperson",
+            "sales-person",
             "reminder_detail",
             "notes",
         )
@@ -284,3 +282,9 @@ def get_completed_by(self, obj):
                 "name": obj.completed_by.get_full_name() or obj.completed_by.username
             }
         return None
+
+class AddCalendarActivitySerializer(serializers.Serializer):
+    company_id = serializers.IntegerField()
+    activity_date = serializers.DateField()
+    title = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)

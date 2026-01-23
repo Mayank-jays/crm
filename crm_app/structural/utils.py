@@ -2,7 +2,7 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django_solvitize.utils.GlobalImports import TokenAuthentication as DRFTokenAuthentication
 from rest_framework.authentication import get_authorization_header
-from .models import StructuralReminder, StructuralNotification
+from .models import StructuralReminder, StructuralNotification, StructuralCalendarActivity
 
 
 def move_reminder_to_next_date(reminder):
@@ -23,10 +23,13 @@ def move_reminder_to_next_date(reminder):
         # Custom / None → no recurrence
         return 
     
-    reminder.status = "Scheduled"
-    reminder.completed_at = None
+    reminder.status = "Scheduled" 
     reminder.reminder_date = next_date
     reminder.save(update_fields=["reminder_date", "status", "completed_at"])
+    
+    StructuralCalendarActivity.objects.filter(
+        related_reminder=reminder
+    ).update(activity_date=reminder.reminder_date)
 
         
 class BearerOrTokenAuthentication(DRFTokenAuthentication):

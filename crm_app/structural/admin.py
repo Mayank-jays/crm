@@ -101,17 +101,7 @@ class StructuralReminderAdmin(admin.ModelAdmin):
 # ----------------------------
 @admin.register(StructuralCalendarActivity)
 class StructuralCalendarActivityAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'activity_date',
-        'company',
-        'user',
-        'related_reminder',
-        'created_at',
-    )
-    search_fields = ('description',)
-    ordering = ('-activity_date',)
-
+    list_display = ('id', 'title', 'activity', 'created_at')
 
 # ----------------------------
 # Structural Notification Admin

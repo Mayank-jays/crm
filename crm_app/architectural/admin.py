@@ -102,14 +102,14 @@ class ArchitecturalReminderAdmin(admin.ModelAdmin):
 class ArchitecturalCalendarActivityAdmin(admin.ModelAdmin):
     list_display = (
         'id',
-        'activity_date',
+        'activity',
         'company',
         'user',
         'related_reminder',
         'created_at',
     )
     search_fields = ('description',)
-    ordering = ('-activity_date',)
+    ordering = ('-activity',)
 
 
 # ----------------------------
